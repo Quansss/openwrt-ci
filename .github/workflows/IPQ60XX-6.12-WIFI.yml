@@ -110,25 +110,18 @@ jobs:
       run: |
         cd $OPENWRT_PATH
         make defconfig
-        # ===== 使用 sed 强制锁定 32 位 ARM (避免 scripts/config 报错) =====
-        # 禁用 arm64，启用 arm
+        # ===== 强制锁定 32 位 ARM (第一次) =====
         sed -i 's/^CONFIG_arm64=y/# CONFIG_arm64 is not set/' .config
         sed -i 's/^# CONFIG_arm is not set/CONFIG_arm=y/' .config
-        sed -i 's/^CONFIG_arm=y/CONFIG_arm=y/' .config  # 确保行存在
-        # 设置目标板和子目标
         sed -i '/CONFIG_TARGET_BOARD=/d' .config
         sed -i '/CONFIG_TARGET_SUBTARGET=/d' .config
         echo 'CONFIG_TARGET_BOARD="qualcommax"' >> .config
         echo 'CONFIG_TARGET_SUBTARGET="ipq60xx"' >> .config
-        # 确保内存配置为 256MB
         sed -i 's/^CONFIG_ATH11K_MEM_PROFILE.*/CONFIG_ATH11K_MEM_PROFILE_256M=y/' .config
         sed -i 's/^CONFIG_IPQ_MEM_PROFILE.*/CONFIG_IPQ_MEM_PROFILE_256=y/' .config
         sed -i 's/^CONFIG_KERNEL_IPQ_MEM_PROFILE.*/CONFIG_KERNEL_IPQ_MEM_PROFILE=256/' .config
-        # 重新生成配置
         make defconfig
-        # 再次确保关键设置没有被覆盖
         grep -q 'CONFIG_arm64=y' .config && echo "ERROR: 64-bit detected" && exit 1
-        grep -q 'CONFIG_arm=y' .config || echo "CONFIG_arm=y" >> .config
         # ========================================
         make download -j8
         find dl -size -1024c -exec ls -l {} \;
@@ -138,6 +131,25 @@ jobs:
       id: compile
       run: |
         cd $OPENWRT_PATH
+        # ===== 再次强制锁定 32 位 ARM (编译前最后一次修正) =====
+        make defconfig
+        sed -i 's/^CONFIG_arm64=y/# CONFIG_arm64 is not set/' .config
+        sed -i 's/^# CONFIG_arm is not set/CONFIG_arm=y/' .config
+        sed -i '/CONFIG_TARGET_BOARD=/d' .config
+        sed -i '/CONFIG_TARGET_SUBTARGET=/d' .config
+        echo 'CONFIG_TARGET_BOARD="qualcommax"' >> .config
+        echo 'CONFIG_TARGET_SUBTARGET="ipq60xx"' >> .config
+        make defconfig
+        echo "=== 最终目标架构检查 ==="
+        grep "CONFIG_TARGET_BOARD" .config || echo "未找到 CONFIG_TARGET_BOARD"
+        grep "CONFIG_TARGET_SUBTARGET" .config || echo "未找到 CONFIG_TARGET_SUBTARGET"
+        grep "CONFIG_arm" .config
+        if grep -q 'CONFIG_arm64=y' .config; then
+          echo "错误：检测到 64 位架构，中止编译"
+          exit 1
+        fi
+        echo "========================="
+        # ===================================================
         echo -e "$(nproc) thread compile"
         make -j$(nproc) || make -j1 || make -j1 V=s
         echo "status=success" >> $GITHUB_OUTPUT

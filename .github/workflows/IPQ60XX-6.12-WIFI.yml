@@ -110,15 +110,26 @@ jobs:
       run: |
         cd $OPENWRT_PATH
         make defconfig
-        # ===== 强制锁定 32 位 ARM =====
-        scripts/config --disable CONFIG_arm64
-        scripts/config --enable CONFIG_arm
-        scripts/config --set-str CONFIG_TARGET_BOARD qualcommax
-        scripts/config --set-str CONFIG_TARGET_SUBTARGET ipq60xx
-        scripts/config --set-val CONFIG_ATH11K_MEM_PROFILE 256
-        scripts/config --set-val CONFIG_IPQ_MEM_PROFILE 256
+        # ===== 使用 sed 强制锁定 32 位 ARM (避免 scripts/config 报错) =====
+        # 禁用 arm64，启用 arm
+        sed -i 's/^CONFIG_arm64=y/# CONFIG_arm64 is not set/' .config
+        sed -i 's/^# CONFIG_arm is not set/CONFIG_arm=y/' .config
+        sed -i 's/^CONFIG_arm=y/CONFIG_arm=y/' .config  # 确保行存在
+        # 设置目标板和子目标
+        sed -i '/CONFIG_TARGET_BOARD=/d' .config
+        sed -i '/CONFIG_TARGET_SUBTARGET=/d' .config
+        echo 'CONFIG_TARGET_BOARD="qualcommax"' >> .config
+        echo 'CONFIG_TARGET_SUBTARGET="ipq60xx"' >> .config
+        # 确保内存配置为 256MB
+        sed -i 's/^CONFIG_ATH11K_MEM_PROFILE.*/CONFIG_ATH11K_MEM_PROFILE_256M=y/' .config
+        sed -i 's/^CONFIG_IPQ_MEM_PROFILE.*/CONFIG_IPQ_MEM_PROFILE_256=y/' .config
+        sed -i 's/^CONFIG_KERNEL_IPQ_MEM_PROFILE.*/CONFIG_KERNEL_IPQ_MEM_PROFILE=256/' .config
+        # 重新生成配置
         make defconfig
-        # ==============================
+        # 再次确保关键设置没有被覆盖
+        grep -q 'CONFIG_arm64=y' .config && echo "ERROR: 64-bit detected" && exit 1
+        grep -q 'CONFIG_arm=y' .config || echo "CONFIG_arm=y" >> .config
+        # ========================================
         make download -j8
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;

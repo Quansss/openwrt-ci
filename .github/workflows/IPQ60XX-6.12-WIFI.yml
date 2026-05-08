@@ -110,6 +110,15 @@ jobs:
       run: |
         cd $OPENWRT_PATH
         make defconfig
+        # ===== 强制锁定 32 位 ARM =====
+        scripts/config --disable CONFIG_arm64
+        scripts/config --enable CONFIG_arm
+        scripts/config --set-str CONFIG_TARGET_BOARD qualcommax
+        scripts/config --set-str CONFIG_TARGET_SUBTARGET ipq60xx
+        scripts/config --set-val CONFIG_ATH11K_MEM_PROFILE 256
+        scripts/config --set-val CONFIG_IPQ_MEM_PROFILE 256
+        make defconfig
+        # ==============================
         make download -j8
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
